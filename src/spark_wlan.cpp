@@ -546,15 +546,6 @@ int SPARK_WLAN_Patch(void)
 	// Init WLAN and request to load with patches.
 	SPARK_WLAN_Init(0);
 
-    //
-    // If MAC does not exist, it is recommended that
-    // the user will write a valid mac address.
-    //
-    if (mac_status != 0)
-    {
-    	//Write a valid MAC address here
-    }
-
 	if (!SPARK_WLAN_LatestSP())
 	{
 		//Patch update failed
@@ -985,6 +976,34 @@ void SPARK_WLAN_Setup(void (*presence_announcement_callback)(void))
 		{
 			// Break the while loop to continue executing the rest of the firmware
 			break;
+		}
+	}
+
+	//
+	// If the set MAC address is corrupted/invalid,
+	// create and set a Spark specified MAC address
+	// first 3 bytes representing TI vendor ID
+	// plus 3,9,10 byte offset from STM32's device ID
+	//
+	if (cMacFromEeprom[0] != 0x08 && cMacFromEeprom[1] != 0x00 && cMacFromEeprom[2] != 0x28)
+	{
+		//Write a valid MAC address here
+
+		char deviceID[12];
+		memcpy(deviceID, (char *)ID1, 12);
+
+		cMacFromEeprom[0] = 0x08;
+		cMacFromEeprom[1] = 0x00;
+		cMacFromEeprom[2] = 0x28;
+		cMacFromEeprom[3] = deviceID[2];//3rd byte
+		cMacFromEeprom[4] = deviceID[8];//9th byte
+		cMacFromEeprom[5] = deviceID[9];//10th byte
+
+		return_status = 1;
+
+		while (return_status)
+		{
+			return_status = nvmem_set_mac_address(cMacFromEeprom);
 		}
 	}
 
