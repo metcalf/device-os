@@ -985,7 +985,7 @@ void SPARK_WLAN_Setup(void (*presence_announcement_callback)(void))
 	// first 3 bytes representing TI vendor ID
 	// plus 3,9,10 byte offset from STM32's device ID
 	//
-	if (cMacFromEeprom[0] != 0x08 && cMacFromEeprom[1] != 0x00 && cMacFromEeprom[2] != 0x28)
+	if (cMacFromEeprom[0] != 0x08 || cMacFromEeprom[1] != 0x00 || cMacFromEeprom[2] != 0x28)
 	{
 		//Write a valid MAC address here
 
