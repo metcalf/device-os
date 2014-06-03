@@ -985,25 +985,28 @@ void SPARK_WLAN_Setup(void (*presence_announcement_callback)(void))
 	// first 3 bytes representing TI vendor ID
 	// plus 3,9,10 byte offset from STM32's device ID
 	//
-	if (cMacFromEeprom[0] != 0x08 || cMacFromEeprom[1] != 0x00 || cMacFromEeprom[2] != 0x28)
+	if (cMacFromEeprom[0] != 0x08 || cMacFromEeprom[1] != 0x00 || cMacFromEeprom[2] != 0x28)//check for TI id
 	{
-		//Write a valid MAC address here
-
-		char deviceID[12];
-		memcpy(deviceID, (char *)ID1, 12);
-
-		cMacFromEeprom[0] = 0x08;
-		cMacFromEeprom[1] = 0x00;
-		cMacFromEeprom[2] = 0x28;
-		cMacFromEeprom[3] = deviceID[2];//3rd byte
-		cMacFromEeprom[4] = deviceID[8];//9th byte
-		cMacFromEeprom[5] = deviceID[9];//10th byte
-
-		return_status = 1;
-
-		while (return_status)
+		if (!(cMacFromEeprom[0] == 0x00 && cMacFromEeprom[1] == 0x19 && cMacFromEeprom[2] == 0x94))//check for Jorjin id
 		{
-			return_status = nvmem_set_mac_address(cMacFromEeprom);
+			//Write a valid TI vendor based MAC address here
+
+			char deviceID[12];
+			memcpy(deviceID, (char *)ID1, 12);
+
+			cMacFromEeprom[0] = 0x08;
+			cMacFromEeprom[1] = 0x00;
+			cMacFromEeprom[2] = 0x28;
+			cMacFromEeprom[3] = deviceID[2];//3rd byte
+			cMacFromEeprom[4] = deviceID[8];//9th byte
+			cMacFromEeprom[5] = deviceID[9];//10th byte
+
+			return_status = 1;
+
+			while (return_status)
+			{
+				return_status = nvmem_set_mac_address(cMacFromEeprom);
+			}
 		}
 	}
 
