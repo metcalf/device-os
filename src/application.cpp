@@ -211,17 +211,11 @@ void getConfig(char* dest, int len, uint8_t *mempos) {
 }
 
 void loadConfiguration(app_type_t *appType, uint16_t *port, char *mqttHost, char *rootTopic, char *name, int lens){
-    uint8_t mempos = 0;
-
-    if(EEPROM.read(mempos) != CONFIG_VERSION){
-        DEBUG("Attempted to load configuration that isn't set or is outdated.");
-        return;
-    }
+    uint8_t mempos = 1;
 
     *appType =(app_type_t)EEPROM.read(mempos++);
     *port = (uint16_t)EEPROM.read(mempos++) | ((uint16_t)EEPROM.read(mempos++) << 8);
 
-    mempos++;
     getConfig(mqttHost, lens, &mempos);
     getConfig(rootTopic, lens, &mempos);
     getConfig(name, lens, &mempos);
@@ -230,22 +224,27 @@ void loadConfiguration(app_type_t *appType, uint16_t *port, char *mqttHost, char
 
 void configure(){
     system_tick_t start = millis();
-    bool configured = false;
-    uint8_t mempos = 4;
+    uint8_t mempos = 0;
+    uint8_t configVersion = EEPROM.read(mempos++);
     uint16_t port;
     char buf[32];
     char c;
 
-    if(EEPROM.read(0) == 33){
-        configured = true;
+    delay(1500);
+
+    if(configVersion > 0 && configVersion != CONFIG_VERSION){
+        DEBUG("Detected outdated config version %d, need %d", configVersion, CONFIG_VERSION);
     }
 
-    delay(1500);
-    Serial.print("Press enter to start configuration.");
+    Serial.println("Press enter to start configuration.");
 
     while(true){
-        if(configured && ((millis() - start) > CONFIG_DELAY)){
-            return;
+        if((millis() - start) > CONFIG_DELAY){
+            if(configVersion == CONFIG_VERSION) {
+                return;
+            }
+            Serial.println("Press enter to start configuration.");
+            start = millis();
         }
 
         c = Serial.read();
@@ -262,22 +261,23 @@ void configure(){
         read_line(buf, 32);
 
         if(buf[0] == '1'){
-            EEPROM.write(1, BUTTON);
-        } else {
-            EEPROM.write(1, GONG);
+            EEPROM.write(mempos++, BUTTON);
+            break;
+        } else if(buf[0] == '0'){
+            EEPROM.write(mempos++, GONG);
+            break;
         }
     }
-
-    writeConfig("MQTT Host: ", &mempos);
 
     do {
         buf[0] = '\0';
         Serial.print("MQTT Port: ");
         read_line(buf, 32);
-    } while((port = (uint16_t)atoi(buf)) == 0 && port < 0xFFFF);
-    EEPROM.write(2, port & 0xFF);
-    EEPROM.write(3, port >> 8);
+    } while((port = (uint16_t)atoi(buf)) == 0);
+    EEPROM.write(mempos++, port & 0xFF);
+    EEPROM.write(mempos++, (port >> 8) & 0xFF);
 
+    writeConfig("MQTT Host: ", &mempos);
     writeConfig("Root topic (e.g. /foo/bar): ", &mempos);
     writeConfig("Name: ", &mempos);
 
@@ -286,7 +286,7 @@ void configure(){
     // Will force the wifi credentials to update
     WiFi.listen();
 
-    EEPROM.write(0, 33);
+    EEPROM.write(0, CONFIG_VERSION);
 }
 
 void setup()
