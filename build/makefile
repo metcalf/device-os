@@ -23,7 +23,7 @@ rwildcard = $(wildcard $1$2) $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2
 # object files will be placed.
 # Note: Currently set to <project>/build/obj directory and set relative to
 # the dir which makefile is invoked. If the makefile is moved to the project
-# root, BUILD_PATH = build can be used to store the build products in 
+# root, BUILD_PATH = build can be used to store the build products in
 # the build directory.
 BUILD_PATH = obj
 
@@ -45,7 +45,7 @@ include $(SRC_MAKEFILES)
 # Paths to dependant projects, referenced from root of this project
 LIB_CORE_COMMON_PATH = ../core-common-lib
 LIB_CORE_COMMUNICATION_PATH = ../core-communication-lib
-LIB_CORE_LIBRARIES_PATH = libraries/
+LIB_CORE_LIBRARIES_PATH = libraries
 
 # Include directoris for optional "libraries" (eg. Serial2.h)
 INCLUDE_DIRS += $(LIB_CORE_LIBRARIES_PATH)/Serial2
@@ -60,8 +60,15 @@ INCLUDE_DIRS += $(LIB_CORE_COMMON_PATH)/SPARK_Firmware_Driver/inc
 INCLUDE_DIRS += $(LIB_CORE_COMMUNICATION_PATH)/lib/tropicssl/include
 INCLUDE_DIRS += $(LIB_CORE_COMMUNICATION_PATH)/src
 
+INCLUDE_DIRS += $(LIB_CORE_LIBRARIES_PATH)/FP
+INCLUDE_DIRS += $(LIB_CORE_LIBRARIES_PATH)/mqtt/MQTTClient/src
+INCLUDE_DIRS += $(LIB_CORE_LIBRARIES_PATH)/mqtt/MQTTPacket/src
+
+CPPSRC += $(LIB_CORE_LIBRARIES_PATH)/FP/FP.cpp
+CSRC += $(patsubst $(SRC_PATH)/%,%,$(wildcard $(SRC_PATH)/$(LIB_CORE_LIBRARIES_PATH)/mqtt/MQTTPacket/src/*.c))
+
 # Compiler flags
-CFLAGS =  -g3 -gdwarf-2 -Os -mcpu=cortex-m3 -mthumb 
+CFLAGS =  -g3 -gdwarf-2 -Os -mcpu=cortex-m3 -mthumb
 CFLAGS += $(patsubst %,-I$(SRC_PATH)/%,$(INCLUDE_DIRS)) -I.
 CFLAGS += -ffunction-sections -Wall -fmessage-length=0
 
@@ -77,29 +84,30 @@ CFLAGS += -DSTM32F10X_MD
 CFLAGS += -DDFU_BUILD_ENABLE
 CFLAGS += -DSPARK=1
 
-ifeq ("$(USE_SWD_JTAG)","y") 
+ifeq ("$(USE_SWD_JTAG)","y")
 CFLAGS += -DUSE_SWD_JTAG
 endif
 
-ifeq ("$(DEBUG_BUILD)","y") 
+ifeq ("$(DEBUG_BUILD)","y")
 CFLAGS += -DDEBUG_BUILD
 else
 CFLAGS += -DRELEASE_BUILD
 endif
 
 # C++ specific flags
-CPPFLAGS = -fno-exceptions -fno-rtti 
+CPPFLAGS = -fno-exceptions -fno-rtti
 
 # Linker flags
-LDFLAGS += -T../linker/linker_stm32f10x_md_dfu.ld -nostartfiles -Xlinker --gc-sections 
+LDFLAGS += -T../linker/linker_stm32f10x_md_dfu.ld -nostartfiles -Xlinker --gc-sections
 LDFLAGS += -L$(SRC_PATH)/$(LIB_CORE_COMMON_PATH)/build -lcore-common-lib
 LDFLAGS += -L$(SRC_PATH)/$(LIB_CORE_COMMUNICATION_PATH)/build -lcore-communication-lib
 LDFLAGS += -Wl,-Map,$(TARGET).map
 LDFLAGS += --specs=nano.specs -lc -lnosys
 LDFLAGS += -u _printf_float
+LDFLAGS += -D__gong_wav_path='"$(SRC_PATH)/data/gong.wav"'
 
 # Assember flags
-ASFLAGS =  -g3 -gdwarf-2 -mcpu=cortex-m3 -mthumb 
+ASFLAGS =  -g3 -gdwarf-2 -mcpu=cortex-m3 -mthumb
 ASFLAGS += -x assembler-with-cpp -fmessage-length=0
 
 # Collect all object and dep files
@@ -151,7 +159,7 @@ size: $(TARGET).elf
 $(TARGET).elf : check_external_deps $(ALLOBJ)
 	@echo Building target: $@
 	@echo Invoking: ARM GCC C++ Linker
-	$(CPP) $(CFLAGS) $(ALLOBJ) --output $@ $(LDFLAGS)
+	$(CPP) $(CFLAGS) $(ALLOBJ) $(SRC_PATH)/data/gong.S --output $@ $(LDFLAGS)
 	@echo
 
 # Check for external dependancies are up to date
@@ -211,4 +219,3 @@ clean:
 
 # Include auto generated dependancy files
 -include $(ALLDEPS)
-

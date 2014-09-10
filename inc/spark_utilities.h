@@ -30,8 +30,9 @@
 #include "main.h"
 #include "spark_wiring_string.h"
 #include "spark_wiring_time.h"
+/*
 #include "spark_protocol.h"
-
+*/
 #define BYTE_N(x,n)						(((x) >> n*8) & 0x000000FF)
 
 #define SPARK_BUF_LEN					600
@@ -103,6 +104,7 @@ public:
 
 class SparkClass {
 public:
+/*
 	static void variable(const char *varKey, void *userVar, Spark_Data_TypeDef userVarType);
 	static void function(const char *funcKey, int (*pFunc)(String paramString));
 	static void publish(const char *eventName);
@@ -119,14 +121,20 @@ public:
 	static bool subscribe(String eventName, EventHandler handler);
 	static bool subscribe(String eventName, EventHandler handler, Spark_Subscription_Scope_TypeDef scope);
 	static bool subscribe(String eventName, EventHandler handler, String deviceID);
+*/
 	static void sleep(Spark_Sleep_TypeDef sleepMode, long seconds);
 	static void sleep(long seconds);
+/*
 	static bool connected(void);
 	static void connect(void);
 	static void disconnect(void);
-        static void process(void);
+*/
+
+    static void process(void){};
 	static String deviceID(void);
+/*
 	static void syncTime(void);
+*/
 };
 
 #define SYSTEM_MODE(mode)  SystemClass SystemMode(mode);
@@ -146,14 +154,18 @@ int Internet_Test(void);
 int Spark_Connect(void);
 int Spark_Disconnect(void);
 void Spark_ConnectAbort_WLANReset(void);
-
+/*
 void Spark_Protocol_Init(void);
+*/
 int Spark_Handshake(void);
+/*
 bool Spark_Communication_Loop(void);
+*/
 void Multicast_Presence_Announcement(void);
+/*
 void Spark_Signal(bool on);
 void Spark_SetTime(unsigned long dateTime);
-
+*/
 int userVarType(const char *varKey);
 void *getUserVar(const char *varKey);
 int userFuncSchedule(const char *funcKey, const char *paramString);

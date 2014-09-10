@@ -1,7 +1,7 @@
 # This file is a makefile included from the top level makefile which
 # defines the sources built for the target.
 
-# Define the prefix to this directory. 
+# Define the prefix to this directory.
 # Note: The name must be unique within this build and should be
 #       based on the root of the project
 TARGET_SRC_PATH = src
@@ -43,6 +43,14 @@ CPPSRC += $(TARGET_SRC_PATH)/usb_istr.cpp
 CPPSRC += $(TARGET_SRC_PATH)/usb_prop.cpp
 CPPSRC += $(TARGET_SRC_PATH)/wifi_credentials_reader.cpp
 
+CPPSRC += $(TARGET_SRC_PATH)/timer.cpp
+CPPSRC += $(TARGET_SRC_PATH)/scheduler.cpp
+CPPSRC += $(TARGET_SRC_PATH)/mqtt_network.cpp
+CPPSRC += $(TARGET_SRC_PATH)/gong.cpp
+CPPSRC += $(TARGET_SRC_PATH)/memory_free.cpp
+CPPSRC += $(TARGET_SRC_PATH)/gong_app.cpp
+CPPSRC += $(TARGET_SRC_PATH)/button_app.cpp
+CPPSRC += $(TARGET_SRC_PATH)/sound.cpp
+
 # ASM source files included in this build.
 ASRC +=
-

@@ -23,154 +23,473 @@
  ******************************************************************************
  */
 
-/* Includes ------------------------------------------------------------------*/  
+/* Includes ------------------------------------------------------------------*/
 #include "application.h"
 
-/* Function prototypes -------------------------------------------------------*/
-int tinkerDigitalRead(String pin);
-int tinkerDigitalWrite(String command);
-int tinkerAnalogRead(String pin);
-int tinkerAnalogWrite(String command);
+#define BUTTON_PIN D4
+#define PWR_PIN D7
+#define CTRL_PIN A7
+#define MAX_TOPIC_LEN 64
 
-SYSTEM_MODE(AUTOMATIC);
+#define CONFIG_DELAY 3500
+#define CONF_BUF_LEN 64
+#define CONFIG_VERSION 1
 
-/* This function is called once at start up ----------------------------------*/
+enum app_type_t { GONG = 0, BUTTON = 1 };
+
+SYSTEM_MODE(MANUAL);
+
+const uint16_t MQTT_COMMAND_TIMEOUT =  8000;
+
+MQTTNetwork *mqttNetwork;
+MQTT::Client<MQTTNetwork, Timer> *mqttClient;
+BaseApp *app;
+Timer wifiResetTimer;
+Timer debounceTimer;
+
+#if defined(DEBUG_BUILD)
+Timer debugTimer;
+#endif
+
+volatile bool buttonPressed = false;
+volatile bool pingReceived = false;
+volatile bool buttonReceived = false;
+volatile bool ownButtonReceived = false;
+
+const char* topicFormat = "%s/%s/button";
+char pubTopic[MAX_TOPIC_LEN];
+char subTopic[MAX_TOPIC_LEN];
+char mqttHost[CONF_BUF_LEN];
+
+void onButton()
+{
+    if(debounceTimer.expired())
+    {
+        buttonPressed = true;
+    }
+    debounceTimer.countdown_ms(50);
+}
+
+void onMessage(MQTT::MessageData* data)
+{
+    DEBUG("Receieved MQTT message with payload length %d starting with %c",
+          data->message->payloadlen,
+          ((const char *)data->message->payload)[0]);
+
+    bool ownMessage = (strncmp(data->topicName, pubTopic, data->topicLen) == 0);
+
+    if(strncmp("released",
+               (const char *)data->message->payload,
+               data->message->payloadlen) == 0)
+    {
+        if(ownMessage)
+        {
+            DEBUG("Received own button message");
+            ownButtonReceived = true;
+        }
+        else
+        {
+            DEBUG("Received button message");
+            buttonReceived = true;
+        }
+    }
+    else if(strncmp("ping",
+                    (const char *)data->message->payload,
+                    data->message->payloadlen) == 0)
+    {
+        if(ownMessage)
+        {
+            DEBUG("Receive own ping message, ignoring");
+        }
+        else
+        {
+            DEBUG("Received ping message");
+            pingReceived = true;
+        }
+    }
+    else
+    {
+        DEBUG("Received unknown message");
+    }
+}
+
+void publish(char* content)
+{
+    MQTT::Message msg = {
+        MQTT::QOS0, // qos
+        false, // retained
+        false, // dup
+        NULL, // id
+        content, // payload
+        strlen(content) // payloadlen
+    };
+
+    if(mqttClient->publish(pubTopic, &msg) == MQTT::FAILURE)
+    {
+        DEBUG("Error publishing message. Disconnecting.");
+        mqttNetwork->disconnect();
+    };
+}
+
+// Copied from the wifi credentials reader
+void read_line(char *dst, int max_len)
+{
+  char c = 0, i = 0;
+  while (1)
+  {
+    if (0 < Serial.available())
+    {
+      c = Serial.read();
+
+      if (i == max_len || c == '\r' || c == '\n')
+      {
+        *dst = '\0';
+        break;
+      }
+
+      if (c == 8 || c == 127)
+      {
+    	//for backspace or delete
+    	if (i > 0)
+    	{
+          --dst;
+          --i;
+    	}
+    	else
+    	{
+    	  continue;
+    	}
+      }
+      else
+      {
+        *dst++ = c;
+        ++i;
+      }
+
+      Serial.write(c);
+    }
+  }
+  Serial.println();
+  while (0 < Serial.available())
+    Serial.read();
+}
+
+void writeConfig(char* prompt, uint8_t *mempos){
+    uint8_t pos = 0;
+    char buf[CONF_BUF_LEN];
+
+    Serial.print(prompt);
+
+    buf[0] = '\0';
+    do {
+        read_line(buf, CONF_BUF_LEN);
+    } while(strlen(buf) == 0);
+
+    do {
+        EEPROM.write(*mempos, buf[pos]);
+        (*mempos)++;
+        pos++;
+    } while(buf[pos-1] != '\0');
+
+    if(*mempos > EEPROM_SIZE){
+        Serial.println("You overran the EEPROM size of 100 bytes! Try again!");
+    }
+}
+
+void getConfig(char* dest, int len, uint8_t *mempos) {
+    int strpos = 0;
+
+    while(strpos < len){
+        dest[strpos] = EEPROM.read(*mempos);
+        (*mempos)++;
+        if(dest[strpos] == '\0'){
+            return;
+        }
+        strpos++;
+    }
+    dest[len-1] = '\0';
+}
+
+void loadConfiguration(app_type_t *appType, uint16_t *port, char *mqttHost, char *rootTopic, char *name, int lens){
+    uint8_t mempos = 0;
+
+    if(EEPROM.read(mempos) != CONFIG_VERSION){
+        DEBUG("Attempted to load configuration that isn't set or is outdated.");
+        return;
+    }
+
+    *appType =(app_type_t)EEPROM.read(mempos++);
+    *port = (uint16_t)EEPROM.read(mempos++) | ((uint16_t)EEPROM.read(mempos++) << 8);
+
+    mempos++;
+    getConfig(mqttHost, lens, &mempos);
+    getConfig(rootTopic, lens, &mempos);
+    getConfig(name, lens, &mempos);
+
+}
+
+void configure(){
+    system_tick_t start = millis();
+    bool configured = false;
+    uint8_t mempos = 4;
+    uint16_t port;
+    char buf[32];
+    char c;
+
+    if(EEPROM.read(0) == 33){
+        configured = true;
+    }
+
+    delay(1500);
+    Serial.print("Press enter to start configuration.");
+
+    while(true){
+        if(configured && ((millis() - start) > CONFIG_DELAY)){
+            return;
+        }
+
+        c = Serial.read();
+        if(c == '\r' || c == '\n'){
+            break;
+        }
+    }
+    DEBUG("Starting configuration process");
+    delay(100);
+
+    while(true) {
+        buf[0] = '\0';
+        Serial.print("App type 0=gong 1=button: ");
+        read_line(buf, 32);
+
+        if(buf[0] == '1'){
+            EEPROM.write(1, BUTTON);
+        } else {
+            EEPROM.write(1, GONG);
+        }
+    }
+
+    writeConfig("MQTT Host: ", &mempos);
+
+    do {
+        buf[0] = '\0';
+        Serial.print("MQTT Port: ");
+        read_line(buf, 32);
+    } while((port = (uint16_t)atoi(buf)) == 0 && port < 0xFFFF);
+    EEPROM.write(2, port & 0xFF);
+    EEPROM.write(3, port >> 8);
+
+    writeConfig("Root topic (e.g. /foo/bar): ", &mempos);
+    writeConfig("Name: ", &mempos);
+
+    Serial.println("Please wait a few moments to start Wifi configuration.");
+
+    // Will force the wifi credentials to update
+    WiFi.listen();
+
+    EEPROM.write(0, 33);
+}
+
 void setup()
 {
-	//Setup the Tinker application here
+    char name[CONF_BUF_LEN], rootTopic[CONF_BUF_LEN];
+    uint16_t mqttPort;
+    app_type_t appType;
 
-	//Register all the Tinker functions
-	Spark.function("digitalread", tinkerDigitalRead);
-	Spark.function("digitalwrite", tinkerDigitalWrite);
+    DEBUG("Beginning application setup");
+#ifndef DEBUG_BUILD
+    Serial.begin(9600);
+#endif
 
-	Spark.function("analogread", tinkerAnalogRead);
-	Spark.function("analogwrite", tinkerAnalogWrite);
+    configure();
 
+#ifndef DEBUG_BUILD
+    if(!WLAN_SMART_CONFIG_START){
+      Serial.end();
+    }
+#endif
+
+    DEBUG("Loading configuration");
+    loadConfiguration(&appType, &mqttPort, mqttHost, rootTopic, name, 64);
+    DEBUG("Configuration loaded: '%s:%d%s/%s'", mqttHost, mqttPort, rootTopic, name);
+
+    Serial.println("Starting the gong app.");
+
+    if(appType == BUTTON)
+    {
+        app = new ButtonApp(CTRL_PIN);
+    }
+    else
+    {
+        app = new GongApp(PWR_PIN, CTRL_PIN);
+    }
+
+    snprintf(subTopic, MAX_TOPIC_LEN, topicFormat, rootTopic, "+");
+    snprintf(pubTopic, MAX_TOPIC_LEN, topicFormat, rootTopic, name);
+
+    mqttNetwork = new MQTTNetwork(mqttHost, mqttPort);
+    mqttClient = new MQTT::Client<MQTTNetwork, Timer>(*mqttNetwork, MQTT_COMMAND_TIMEOUT);
+    mqttClient->setDefaultMessageHandler(onMessage);
+
+    pinMode(BUTTON_PIN, INPUT_PULLUP);
+    attachInterrupt(BUTTON_PIN, onButton, FALLING);
+
+    // If we don't connect successfully we have a problem
+    wifiResetTimer.countdown(60 * 2);
+
+    DEBUG("Application setup complete");
 }
 
-/* This function loops forever --------------------------------------------*/
+char* wifiStatus()
+{
+    if(WiFi.ready()){
+        return "ready";
+    } else if(WiFi.connecting()){
+        return "connecting";
+    } else if(WiFi.listening()){
+        return "listening";
+    } else {
+        return "disconnected";
+    }
+}
+
+void mqttProcess()
+{
+    // Don't reset if we've been connected recently
+    wifiResetTimer.countdown(60);
+
+    if(mqttNetwork->available())
+    {
+        Timer cycleTimer = Timer(MQTT_COMMAND_TIMEOUT);
+
+        DEBUG("MQTT message waiting, processing");
+        if(mqttClient->cycle(cycleTimer) == MQTT::FAILURE)
+        {
+            DEBUG("Failure while recieving MQTT message. Disconnecting.");
+            mqttNetwork->disconnect();
+        };
+    }
+    else
+    {
+        if(mqttClient->keepalive() == MQTT::FAILURE)
+        {
+            DEBUG("Failure sending MQTT keepalive. Disconnecting.");
+            mqttNetwork->disconnect();
+        }
+    }
+}
+
+void mqttConnect()
+{
+    DEBUG("Opening connection to MQTT broker. Wifi status: %s",
+          wifiStatus());
+
+    if(mqttNetwork->connect())
+    {
+        DEBUG("Connecting to MQTT broker");
+        if(mqttClient->connect() == MQTT::SUCCESS)
+        {
+            LED_SetRGBColor(RGB_COLOR_CYAN);
+
+            DEBUG("Subscribing to %s", subTopic);
+            // We pass a null callback and rely on the default
+            // callback since the library handles wildcard
+            // topics incorrectly
+            mqttClient->subscribe(subTopic, MQTT::QOS0, NULL);
+        }
+        else
+        {
+            mqttNetwork->disconnect();
+        }
+    }
+    else if (wifiResetTimer.expired())
+    {
+        DEBUG("Reseting");
+        delay(200);
+        Spark.sleep(SLEEP_MODE_DEEP, 1);
+    }
+    else
+    {
+        DEBUG("Could not connect.  Will reset in %ds.",
+              wifiResetTimer.left_ms() / 1000);
+        // Slow the iterations a little here for debuggin
+        delay(200);
+    }
+}
+
 void loop()
 {
-	//This will run in a loop
+#if defined(DEBUG_BUILD)
+    if(debugTimer.expired()){
+        DEBUG("Wifi Status: %s\tMQTT Network: %s",
+              wifiStatus(),
+              mqttNetwork->connected() ? "connected" : "disconnected");
+        debugTimer.countdown_ms(2000);
+    }
+#endif
+
+    // Wait for SmartConfig/SerialConfig
+    if(WiFi.listening()){
+        wifiResetTimer.countdown(60 * 2);
+        return;
+    }
+
+    if(mqttNetwork->connected())
+    {
+        mqttProcess();
+    }
+    else
+    {
+        mqttConnect();
+    }
+
+    // Button was pressed but is now released
+    if(buttonPressed && debounceTimer.expired() && digitalRead(BUTTON_PIN) == HIGH)
+    {
+        DEBUG("Handling button press");
+        publish("released");
+        app->onButtonPress();
+        buttonPressed = false;
+    }
+
+    if(buttonReceived)
+    {
+        DEBUG("Handling button message");
+        app->onButtonMessage();
+        buttonReceived = false;
+    }
+
+    if(ownButtonReceived)
+    {
+        DEBUG("Handling own button message");
+        app->onOwnButtonMessage();
+        ownButtonReceived = false;
+    }
+
+    if(pingReceived)
+    {
+        DEBUG("Handling ping message");
+        publish("pong");
+
+        pingReceived = false;
+    }
 }
 
-/*******************************************************************************
- * Function Name  : tinkerDigitalRead
- * Description    : Reads the digital value of a given pin
- * Input          : Pin 
- * Output         : None.
- * Return         : Value of the pin (0 or 1) in INT type
-                    Returns a negative number on failure
- *******************************************************************************/
-int tinkerDigitalRead(String pin)
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void debug_output_(const char *p)
 {
-	//convert ascii to integer
-	int pinNumber = pin.charAt(1) - '0';
-	//Sanity check to see if the pin numbers are within limits
-	if (pinNumber< 0 || pinNumber >7) return -1;
+  static boolean once = false;
+  if (!once)
+  {
+      once = true;
+      Serial.begin(9600);
+  }
 
-	if(pin.startsWith("D"))
-	{
-		pinMode(pinNumber, INPUT_PULLDOWN);
-		return digitalRead(pinNumber);
-	}
-	else if (pin.startsWith("A"))
-	{
-		pinMode(pinNumber+10, INPUT_PULLDOWN);
-		return digitalRead(pinNumber+10);
-	}
-	return -2;
+   Serial.print(p);
 }
 
-/*******************************************************************************
- * Function Name  : tinkerDigitalWrite
- * Description    : Sets the specified pin HIGH or LOW
- * Input          : Pin and value
- * Output         : None.
- * Return         : 1 on success and a negative number on failure
- *******************************************************************************/
-int tinkerDigitalWrite(String command)
-{
-	bool value = 0;
-	//convert ascii to integer
-	int pinNumber = command.charAt(1) - '0';
-	//Sanity check to see if the pin numbers are within limits
-	if (pinNumber< 0 || pinNumber >7) return -1;
-
-	if(command.substring(3,7) == "HIGH") value = 1;
-	else if(command.substring(3,6) == "LOW") value = 0;
-	else return -2;
-
-	if(command.startsWith("D"))
-	{
-		pinMode(pinNumber, OUTPUT);
-		digitalWrite(pinNumber, value);
-		return 1;
-	}
-	else if(command.startsWith("A"))
-	{
-		pinMode(pinNumber+10, OUTPUT);
-		digitalWrite(pinNumber+10, value);
-		return 1;
-	}
-	else return -3;
+#ifdef __cplusplus
 }
-
-/*******************************************************************************
- * Function Name  : tinkerAnalogRead
- * Description    : Reads the analog value of a pin
- * Input          : Pin 
- * Output         : None.
- * Return         : Returns the analog value in INT type (0 to 4095)
-                    Returns a negative number on failure
- *******************************************************************************/
-int tinkerAnalogRead(String pin)
-{
-	//convert ascii to integer
-	int pinNumber = pin.charAt(1) - '0';
-	//Sanity check to see if the pin numbers are within limits
-	if (pinNumber< 0 || pinNumber >7) return -1;
-
-	if(pin.startsWith("D"))
-	{
-		pinMode(pinNumber, INPUT);
-		return analogRead(pinNumber);
-	}
-	else if (pin.startsWith("A"))
-	{
-		pinMode(pinNumber+10, INPUT);
-		return analogRead(pinNumber+10);
-	}
-	return -2;
-}
-
-/*******************************************************************************
- * Function Name  : tinkerAnalogWrite
- * Description    : Writes an analog value (PWM) to the specified pin
- * Input          : Pin and Value (0 to 255)
- * Output         : None.
- * Return         : 1 on success and a negative number on failure
- *******************************************************************************/
-int tinkerAnalogWrite(String command)
-{
-	//convert ascii to integer
-	int pinNumber = command.charAt(1) - '0';
-	//Sanity check to see if the pin numbers are within limits
-	if (pinNumber< 0 || pinNumber >7) return -1;
-
-	String value = command.substring(3);
-
-	if(command.startsWith("D"))
-	{
-		pinMode(pinNumber, OUTPUT);
-		analogWrite(pinNumber, value.toInt());
-		return 1;
-	}
-	else if(command.startsWith("A"))
-	{
-		pinMode(pinNumber+10, OUTPUT);
-		analogWrite(pinNumber+10, value.toInt());
-		return 1;
-	}
-	else return -2;
-}
+#endif

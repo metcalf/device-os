@@ -6,7 +6,7 @@
  * @date    10-Nov-2013
  *
  * Updated: 14-Feb-2014 David Sidrane <david_s5@usa.net>
- * @brief   
+ * @brief
  ******************************************************************************
   Copyright (c) 2013 Spark Labs, Inc.  All rights reserved.
 
@@ -39,12 +39,12 @@ TCPClient::TCPClient() : _sock(MAX_SOCK_NUM)
   flush();
 }
 
-TCPClient::TCPClient(uint8_t sock) : _sock(sock) 
+TCPClient::TCPClient(uint8_t sock) : _sock(sock)
 {
   flush();
 }
 
-int TCPClient::connect(const char* host, uint16_t port) 
+int TCPClient::connect(const char* host, uint16_t port)
 {
       int rv = 0;
       if(WiFi.ready())
@@ -62,7 +62,7 @@ int TCPClient::connect(const char* host, uint16_t port)
       return rv;
 }
 
-int TCPClient::connect(IPAddress ip, uint16_t port) 
+int TCPClient::connect(IPAddress ip, uint16_t port)
 {
         int connected = 0;
         if(WiFi.ready())
@@ -101,7 +101,7 @@ int TCPClient::connect(IPAddress ip, uint16_t port)
         return connected;
 }
 
-size_t TCPClient::write(uint8_t b) 
+size_t TCPClient::write(uint8_t b)
 {
         return write(&b, 1);
 }
@@ -116,7 +116,7 @@ int TCPClient::bufferCount()
   return _total - _offset;
 }
 
-int TCPClient::available() 
+int TCPClient::available()
 {
     int avail = 0;
 
@@ -159,7 +159,7 @@ int TCPClient::available()
     return avail;
 }
 
-int TCPClient::read() 
+int TCPClient::read()
 {
 
   return (bufferCount() || available()) ? _buffer[_offset++] : -1;
@@ -177,18 +177,18 @@ int TCPClient::read(uint8_t *buffer, size_t size)
         return read;
 }
 
-int TCPClient::peek() 
+int TCPClient::peek()
 {
   return  (bufferCount() || available()) ? _buffer[_offset] : -1;
 }
 
-void TCPClient::flush() 
+void TCPClient::flush()
 {
   _offset = 0;
   _total = 0;
 }
 
-void TCPClient::stop() 
+void TCPClient::stop()
 {
   DEBUG("_sock %d closesocket", _sock);
 
@@ -200,7 +200,7 @@ void TCPClient::stop()
  _sock = MAX_SOCK_NUM;
 }
 
-uint8_t TCPClient::connected() 
+uint8_t TCPClient::connected()
 {
   // Wlan up, open and not in CLOSE_WAIT or data still in the local buffer
   bool rv = ( 1 == status() || bufferCount()) ? true : false;

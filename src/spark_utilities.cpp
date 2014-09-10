@@ -6,7 +6,7 @@
  * @date    13-March-2013
  *
  * Updated: 14-Feb-2014 David Sidrane <david_s5@usa.net>
- * @brief   
+ * @brief
  ******************************************************************************
   Copyright (c) 2013 Spark Labs, Inc.  All rights reserved.
 
@@ -31,8 +31,9 @@
 #include "string.h"
 #include <stdarg.h>
 
+/*
 SparkProtocol spark_protocol;
-
+*/
 #define INVALID_SOCKET (-1)
 
 long sparkSocket = INVALID_SOCKET;
@@ -87,7 +88,9 @@ static void sub_str(char dest[], char src[], int offset, int len);
 
 SystemClass System;
 RGBClass RGB;
+/*
 SparkClass Spark;
+*/
 
 System_Mode_TypeDef SystemClass::_mode = AUTOMATIC;
 
@@ -190,7 +193,7 @@ void RGBClass::brightness(uint8_t brightness)
 	LED_SetBrightness(brightness);
 #endif
 }
-
+/*
 void SparkClass::variable(const char *varKey, void *userVar, Spark_Data_TypeDef userVarType)
 {
   if (NULL != userVar && NULL != varKey)
@@ -329,7 +332,7 @@ void SparkClass::syncTime(void)
 {
   spark_protocol.send_time_request();
 }
-
+*/
 void SparkClass::sleep(Spark_Sleep_TypeDef sleepMode, long seconds)
 {
 #if defined (SPARK_RTC_ENABLE)
@@ -376,7 +379,7 @@ inline uint8_t isSocketClosed()
     }
   return closed;
 }
-
+/*
 bool SparkClass::connected(void)
 {
 	if(SPARK_CLOUD_SOCKETED && SPARK_CLOUD_CONNECTED)
@@ -408,7 +411,7 @@ void SparkClass::process(void)
   }
 #endif
 }
-
+*/
 String SparkClass::deviceID(void)
 {
 	String deviceID;
@@ -543,6 +546,10 @@ void copyUserVariableKey(char *destination, int variable_index)
          USER_VAR_KEY_LENGTH);
 }
 
+int Spark_Handshake(void){ return 0; }
+void Multicast_Presence_Announcement(void){}
+
+/*
 SparkReturnType::Enum wrapVarTypeInEnum(const char *varKey)
 {
   switch (userVarType(varKey))
@@ -656,7 +663,7 @@ void Multicast_Presence_Announcement(void)
 
   closesocket(multicast_socket);
 }
-
+*/
 /* This function MUST NOT BlOCK!
  * It will be executed every 1ms if LED_Signaling_Start() is called
  * and stopped as soon as LED_Signaling_Stop() is called */
@@ -680,7 +687,7 @@ void LED_Signaling_Override(void)
     }
   }
 }
-
+/*
 void Spark_Signal(bool on)
 {
   if (on)
@@ -694,7 +701,7 @@ void Spark_Signal(bool on)
     LED_Spark_Signal = 0;
   }
 }
-
+*/
 int Internet_Test(void)
 {
     long testSocket;

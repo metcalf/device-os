@@ -37,12 +37,19 @@
 #include "spark_wiring_servo.h"
 #include "spark_wiring_wifi.h"
 #include "spark_wiring_network.h"
-#include "spark_wiring_client.h"  
+#include "spark_wiring_client.h"
 #include "spark_wiring_tcpclient.h"
 #include "spark_wiring_tcpserver.h"
 #include "spark_wiring_udp.h"
 #include "spark_wiring_time.h"
 #include "spark_wiring_tone.h"
 #include "spark_wiring_eeprom.h"
+
+#include "gong.h"
+#include "mqtt_network.h"
+#include "MQTTClient.hpp"
+#include "timer.h"
+#include "gong_app.h"
+#include "button_app.h"
 
 #endif /* APPLICATION_H_ */

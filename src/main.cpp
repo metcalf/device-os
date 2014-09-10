@@ -4,9 +4,9 @@
  * @author  Satish Nair, Zachary Crockett, Zach Supalla and Mohit Bhoite
  * @version V1.0.0
  * @date    13-March-2013
- * 
+ *
  * Updated: 14-Feb-2014 David Sidrane <david_s5@usa.net>
- * 
+ *
  * @brief   Main program body.
  ******************************************************************************
   Copyright (c) 2013 Spark Labs, Inc.  All rights reserved.
@@ -25,7 +25,7 @@
   License along with this program; if not, see <http://www.gnu.org/licenses/>.
   ******************************************************************************
  */
-  
+
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "debug.h"
@@ -138,10 +138,10 @@ extern "C" void SparkCoreConfig(void)
 
 #ifdef SPARK_WLAN_ENABLE
 	/* Start Spark Wlan and connect to Wifi Router by default */
-	SPARK_WLAN_SETUP = 1;
+	SPARK_WLAN_SETUP = 0;
 
 	/* Connect to Spark Cloud by default */
-	SPARK_CLOUD_CONNECT = 1;
+	SPARK_CLOUD_CONNECT = 0;
 #endif
 }
 
@@ -157,6 +157,11 @@ int main(void)
   // We have running firmware, otherwise we wouldn't have gotten here
   DECLARE_SYS_HEALTH(ENTERED_Main);
   DEBUG("Hello from Spark!");
+
+  DECLARE_SYS_HEALTH(ENTERED_Setup);
+  setup();
+
+  SPARK_WLAN_SETUP = 1;
 
 #ifdef SPARK_WLAN_ENABLE
   if (SPARK_WLAN_SETUP)
@@ -184,13 +189,7 @@ int main(void)
 			if(!SPARK_FLASH_UPDATE && !IWDG_SYSTEM_RESET)
 			{
 #endif
-				if((SPARK_WIRING_APPLICATION != 1) && (NULL != setup))
-				{
-					//Execute user application setup only once
-				        DECLARE_SYS_HEALTH(ENTERED_Setup);
-					setup();
-					SPARK_WIRING_APPLICATION = 1;
-				}
+				SPARK_WIRING_APPLICATION = 1;
 
 				if(NULL != loop)
 				{

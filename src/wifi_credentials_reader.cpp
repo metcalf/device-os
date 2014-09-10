@@ -4,7 +4,7 @@
   * @author  Zachary Crockett and Satish Nair
   * @version V1.0.0
   * @date    24-April-2013
-  * @brief  
+  * @brief
   ******************************************************************************
   Copyright (c) 2013 Spark Labs, Inc.  All rights reserved.
 
@@ -29,6 +29,7 @@ WiFiCredentialsReader::WiFiCredentialsReader(ConnectCallback connect_callback)
 {
   this->connect_callback = connect_callback;
   serial.begin(9600);
+  serial.println("Press `w` to start WiFi configuration.");
 }
 
 void WiFiCredentialsReader::read(void)
@@ -68,29 +69,10 @@ void WiFiCredentialsReader::read(void)
 
       print("Awesome. Now we'll connect!\r\n\r\n");
       print("If you see a pulsing cyan light, your Spark Core\r\n");
-      print("has connected to the Cloud and is ready to go!\r\n\r\n");
+      print("has connected and is ready to go!\r\n\r\n");
       print("If your LED flashes red or you encounter any other problems,\r\n");
       print("visit https://www.spark.io/support to debug.\r\n\r\n");
       print("    Spark <3 you!\r\n\r\n");
-    }
-    else if ('i' == c)
-    {
-      char id[12];
-      memcpy(id, (char *)ID1, 12);
-      print("Your core id is ");
-      char hex_digit;
-      for (int i = 0; i < 12; ++i)
-      {
-        hex_digit = 48 + (id[i] >> 4);
-        if (57 < hex_digit)
-          hex_digit += 39;
-        serial.write(hex_digit);
-        hex_digit = 48 + (id[i] & 0xf);
-        if (57 < hex_digit)
-          hex_digit += 39;
-        serial.write(hex_digit);
-      }
-      print("\r\n");
     }
   }
 }
