@@ -34,6 +34,8 @@
 #define CONFIG_DELAY 3500
 #define CONF_BUF_LEN 64
 #define CONFIG_VERSION 1
+#define DEBOUNCE_DELAY 100
+#define TRANSIENT_DELAY 5
 
 enum app_type_t { GONG = 0, BUTTON = 1 };
 
@@ -45,12 +47,15 @@ MQTTNetwork *mqttNetwork;
 MQTT::Client<MQTTNetwork, Timer> *mqttClient;
 BaseApp *app;
 Timer wifiResetTimer;
+Timer transientTimer;
 Timer debounceTimer;
 
 #if defined(DEBUG_BUILD)
 Timer debugTimer;
 #endif
 
+volatile system_tick_t lastInterrupt = 0;
+volatile bool lastInterruptPressed = false;
 volatile bool buttonPressed = false;
 volatile bool pingReceived = false;
 volatile bool buttonReceived = false;
@@ -63,11 +68,17 @@ char mqttHost[CONF_BUF_LEN];
 
 void onButton()
 {
-    if(debounceTimer.expired())
+    bool pressed = digitalRead(BUTTON_PIN) == LOW;
+    system_tick_t time = millis();
+
+    // Last interrupt was the valid, non-transient edge
+    if ((time - lastInterrupt) > TRANSIENT_DELAY)
     {
-        buttonPressed = true;
+        buttonPressed = lastInterruptPressed;
     }
-    debounceTimer.countdown_ms(50);
+
+    lastInterruptPressed = pressed;
+    lastInterrupt = time;
 }
 
 void onMessage(MQTT::MessageData* data)
@@ -331,7 +342,7 @@ void setup()
     mqttClient->setDefaultMessageHandler(onMessage);
 
     pinMode(BUTTON_PIN, INPUT_PULLUP);
-    attachInterrupt(BUTTON_PIN, onButton, FALLING);
+    attachInterrupt(BUTTON_PIN, onButton, CHANGE);
 
     // If we don't connect successfully we have a problem
     wifiResetTimer.countdown(60 * 2);
@@ -442,8 +453,9 @@ void loop()
         mqttConnect();
     }
 
-    // Button was pressed but is now released
-    if(buttonPressed && debounceTimer.expired() && digitalRead(BUTTON_PIN) == HIGH)
+    if(buttonPressed && // Button was pressed
+        digitalRead(BUTTON_PIN) == HIGH && // Button is currently released
+       (millis() - lastInterrupt) > DEBOUNCE_DELAY) // Button is not bouncing
     {
         DEBUG("Handling button press");
         publish("released");
