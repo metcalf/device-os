@@ -33,7 +33,7 @@
 
 #define CONFIG_DELAY 3500
 #define CONF_BUF_LEN 64
-#define CONFIG_VERSION 1
+#define CONFIG_VERSION 2
 #define DEBOUNCE_DELAY 100
 #define TRANSIENT_DELAY 5
 
@@ -61,7 +61,7 @@ volatile bool pingReceived = false;
 volatile bool buttonReceived = false;
 volatile bool ownButtonReceived = false;
 
-const char* topicFormat = "%s/%s/button";
+const char* topicFormat = "%s/%s";
 char pubTopic[MAX_TOPIC_LEN];
 char subTopic[MAX_TOPIC_LEN];
 char mqttHost[CONF_BUF_LEN];
@@ -89,7 +89,7 @@ void onMessage(MQTT::MessageData* data)
 
     bool ownMessage = (strncmp(data->topicName, pubTopic, data->topicLen) == 0);
 
-    if(strncmp("released",
+    if(strncmp("button",
                (const char *)data->message->payload,
                data->message->payloadlen) == 0)
     {
@@ -221,10 +221,11 @@ void getConfig(char* dest, int len, uint8_t *mempos) {
     dest[len-1] = '\0';
 }
 
-void loadConfiguration(app_type_t *appType, uint16_t *port, char *mqttHost, char *rootTopic, char *name, int lens){
+void loadConfiguration(app_type_t *appType, bool *publishButton, uint16_t *port, char *mqttHost, char *rootTopic, char *name, int lens){
     uint8_t mempos = 1;
 
-    *appType =(app_type_t)EEPROM.read(mempos++);
+    *appType = (app_type_t)EEPROM.read(mempos++);
+    *publishButton = (bool)EEPROM.read(mempos++);
     *port = (uint16_t)EEPROM.read(mempos++) | ((uint16_t)EEPROM.read(mempos++) << 8);
 
     getConfig(mqttHost, lens, &mempos);
@@ -240,6 +241,8 @@ void configure(){
     uint16_t port;
     char buf[32];
     char c;
+    app_type_t appType;
+    bool publishButton;
 
     delay(1500);
 
@@ -272,13 +275,35 @@ void configure(){
         read_line(buf, 32);
 
         if(buf[0] == '1'){
-            EEPROM.write(mempos++, BUTTON);
+            appType = BUTTON;
             break;
         } else if(buf[0] == '0'){
-            EEPROM.write(mempos++, GONG);
+            appType = GONG;
             break;
         }
     }
+    EEPROM.write(mempos++, appType);
+
+
+    if (appType == GONG) {
+        while(true) {
+            buf[0] = '\0';
+            Serial.print("Publish button presses [y/n]: ");
+            read_line(buf, 32);
+
+            if(buf[0] == 'y'){
+                publishButton = true;
+                break;
+            } else if(buf[0] == 'n'){
+                publishButton = false;
+                appType = GONG;
+                break;
+            }
+        }
+    } else {
+        publishButton = true
+    }
+    EEPROM.write(mempos++, publishButton);
 
     do {
         buf[0] = '\0';
@@ -458,7 +483,7 @@ void loop()
        (millis() - lastInterrupt) > DEBOUNCE_DELAY) // Button is not bouncing
     {
         DEBUG("Handling button press");
-        publish("released");
+        publish("button");
         app->onButtonPress();
         buttonPressed = false;
     }
@@ -492,7 +517,7 @@ extern "C" {
 
 void debug_output_(const char *p)
 {
-  static boolean once = false;
+  static bool once = false;
   if (!once)
   {
       once = true;
